@@ -4,8 +4,12 @@ import concurrent.futures
 from urllib.parse import urljoin, urlparse
 from curl_cffi import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
-from g import EmailService, TurnstileService
+from email_service import EmailService
+from YesCaptcha_service import TurnstileService
+
+load_dotenv()
 
 # 基础配置
 site_url = "https://accounts.x.ai"
@@ -84,8 +88,8 @@ def register_single_thread():
         print(f"[-] 服务初始化失败: {e}")
         return
     
-    # 修正：直接从 config 获取
-    final_action_id = config["action_id"]
+    # 从 config 获取 action_id，缺少则直接退出
+    final_action_id = config.get("action_id")
     if not final_action_id:
         print("[-] 线程退出：缺少 Action ID")
         return
@@ -149,8 +153,10 @@ def register_single_thread():
                     headers = {
                         "user-agent": user_agent, "accept": "text/x-component", "content-type": "text/plain;charset=UTF-8",
                         "origin": site_url, "referer": f"{site_url}/sign-up", "cookie": f"__cf_bm={session.cookies.get('__cf_bm','')}",
-                        "next-router-state-tree": config["state_tree"], "next-action": final_action_id
+                        "next-router-state-tree": config["state_tree"],
                     }
+                    if final_action_id:
+                        headers["next-action"] = final_action_id
                     payload = [{
                         "emailValidationCode": verify_code,
                         "createUserAndSessionRequest": {
@@ -171,6 +177,7 @@ def register_single_thread():
                             sso = session.cookies.get("sso")
                             if sso:
                                 with file_lock:
+                                    os.makedirs("keys", exist_ok=True)
                                     with open("keys/grok.txt", "a") as f: f.write(sso + "\n")
                                     with open("keys/accounts.txt", "a") as f: f.write(f"{email}:{password}:{sso}\n")
                                     global success_count
@@ -207,15 +214,23 @@ def main():
             tree_match = re.search(r'next-router-state-tree":"([^"]+)"', html)
             if tree_match: config["state_tree"] = tree_match.group(1)
             # Action ID
-            soup = BeautifulSoup(html, 'html.parser')
-            js_urls = [urljoin(start_url, script['src']) for script in soup.find_all('script', src=True) if '_next/static' in script['src']]
+            # 直接用正则从 HTML 抓取所有 /_next/static/chunks/*.js
+            js_urls = [urljoin(start_url, m.group(0)) for m in re.finditer(r"/_next/static/chunks/[^\"'\s>]+\.js", html)]
+            if not js_urls:
+                print(f"[Warn] HTML 长度 {len(html)}, 未解析出 JS，前500字符预览: {html[:500].replace('\n',' ')}")
+            action_found = None
             for js_url in js_urls:
-                js_content = s.get(js_url).text
+                try:
+                    js_content = s.get(js_url, timeout=15).text
+                except Exception as e:
+                    continue
                 match = re.search(r'7f[a-fA-F0-9]{40}', js_content)
                 if match:
-                    config["action_id"] = match.group(0)
-                    print(f"[+] Action ID: {config['action_id']}")
+                    action_found = match.group(0)
+                    print(f"[+] Action ID: {action_found}")
                     break
+            if action_found:
+                config["action_id"] = action_found
         except Exception as e:
             print(f"[-] 初始化扫描失败: {e}")
             return
@@ -233,7 +248,10 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=t) as executor:
         # 只提交与线程数相等的任务，让它们在内部无限循环
         futures = [executor.submit(register_single_thread) for _ in range(t)]
-        concurrent.futures.wait(futures)
+        try:
+            concurrent.futures.wait(futures)
+        except KeyboardInterrupt:
+            print("\n[!] 收到中断信号，准备退出...")
 
 if __name__ == "__main__":
     main()
