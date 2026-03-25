@@ -84,8 +84,8 @@ def is_placeholder_env_value(name, value):
 _load_dotenv()
 
 # 邮箱配置
-EMAIL_PROVIDER = _get_str("EMAIL_PROVIDER", "gptmail").lower()
-SUPPORTED_EMAIL_PROVIDERS = ("cloudflare", "duckmail", "gptmail")
+EMAIL_PROVIDER = _get_str("EMAIL_PROVIDER", "auto").lower()
+SUPPORTED_EMAIL_PROVIDERS = ("auto", "cloudflare", "duckmail", "gptmail", "tempmail")
 EMAIL_API_URL = _get_str("EMAIL_API_URL")
 EMAIL_API_TOKEN = _get_str("EMAIL_API_TOKEN")
 EMAIL_DOMAIN = _get_str("EMAIL_DOMAIN")

@@ -9,3 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
+# Runtime outputs
+exa_apikeys.txt
+

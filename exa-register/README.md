@@ -16,10 +16,12 @@ pip install -r requirements.txt
 ```
 
 ## 配置（.env 或环境变量）
-- 邮箱提供方：`EMAIL_PROVIDER` = `cloudflare` | `duckmail` | `gptmail`
+- 邮箱提供方：`EMAIL_PROVIDER` = `auto` | `cloudflare` | `duckmail` | `gptmail` | `tempmail`
 - Cloudflare 自建邮件 API：`EMAIL_API_URL`, `EMAIL_API_TOKEN`, `EMAIL_DOMAIN` / `EMAIL_DOMAINS`
 - DuckMail：`DUCKMAIL_API_URL` (默认 https://api.duckmail.sbs), `DUCKMAIL_API_KEY`, `DUCKMAIL_DOMAIN` / `DUCKMAIL_DOMAINS`
 - GPTMail：无需额外配置
+- TempMail.lol：无需额外配置
+- `auto`：优先 TempMail.lol，失败自动回退 GPTMail
 - 运行参数：
   - `DEFAULT_COUNT` (默认 5)、`DEFAULT_CONCURRENCY` (默认 2)、`DEFAULT_DELAY` (默认 10)
   - `REGISTER_HEADLESS` (默认 true) — 设为 false 可前台可视化

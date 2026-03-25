@@ -3,6 +3,8 @@
 当前支持：
 1. Cloudflare 自定义邮件 API
 2. DuckMail API
+3. GPTMail
+4. TempMail.lol
 """
 import html
 import random
@@ -35,6 +37,8 @@ _DUCKMAIL_MAILBOX_CACHE = {}
 _SELECTED_DOMAIN = ""
 _GPTMAIL_BASE = "https://mail.chatgpt.org.uk"
 _GPTMAIL_CLIENTS = {}  # email -> client
+_TEMPMAIL_BASE = "https://api.tempmail.lol"
+_TEMPMAIL_INBOXES = {}  # email -> client
 
 
 class GPTMailClient:
@@ -66,8 +70,7 @@ class GPTMailClient:
 
     def generate_email(self):
         self._init_browser_session()
-        url = f"{self.base_url}/api/generate-email"
-        resp = self.session.get(url, timeout=15)
+        resp = self.session.get(f"{self.base_url}/api/generate-email", timeout=15)
         if resp.status_code == 200:
             data = resp.json()
             email = data.get("data", {}).get("email")
@@ -83,11 +86,51 @@ class GPTMailClient:
 
     def list_emails(self, email):
         encoded_email = urllib.parse.quote(email)
-        url = f"{self.base_url}/api/emails?email={encoded_email}"
-        resp = self.session.get(url, timeout=15)
+        resp = self.session.get(f"{self.base_url}/api/emails?email={encoded_email}", timeout=15)
         if resp.status_code == 200:
             return resp.json().get("data", {}).get("emails", [])
         return []
+
+
+class TempMailClient:
+    def __init__(self, proxies=None):
+        self.session = std_requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+        )
+        if proxies:
+            self.session.proxies.update(proxies)
+        self.base_url = _TEMPMAIL_BASE
+        self.token = None
+
+    def generate_email(self):
+        response = self.session.post(f"{self.base_url}/v2/inbox/create", json={}, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        email = data.get("address")
+        token = data.get("token")
+        if not email or not token:
+            raise RuntimeError(f"TempMail 生成失败: {data}")
+        self.token = token
+        return email, token
+
+    def set_token(self, token):
+        self.token = token
+
+    def list_emails(self):
+        if not self.token:
+            raise RuntimeError("TempMail token 缺失")
+        response = self.session.get(
+            f"{self.base_url}/v2/inbox",
+            params={"token": self.token},
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json().get("emails", [])
 
 
 def _get_gptmail_client(email=None):
@@ -96,14 +139,24 @@ def _get_gptmail_client(email=None):
     return GPTMailClient()
 
 
+def _get_tempmail_client(email=None):
+    if email and email in _TEMPMAIL_INBOXES:
+        return _TEMPMAIL_INBOXES[email]
+    return TempMailClient()
+
+
 def rand_str(n=8):
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=n))
+
 
 def get_configured_domains():
     """返回当前 provider 在配置里声明的可选域名。"""
     if EMAIL_PROVIDER == "duckmail":
         return DUCKMAIL_DOMAINS[:]
+    if EMAIL_PROVIDER in {"gptmail", "tempmail", "auto"}:
+        return []
     return EMAIL_DOMAINS[:]
+
 
 def get_active_domain():
     """返回当前实际使用的域名。"""
@@ -116,7 +169,10 @@ def get_active_domain():
 
     if EMAIL_PROVIDER == "duckmail":
         return DUCKMAIL_DOMAIN
+    if EMAIL_PROVIDER in {"gptmail", "tempmail", "auto"}:
+        return ""
     return EMAIL_DOMAIN
+
 
 def set_selected_domain(domain):
     """设置本轮运行使用的域名。"""
@@ -136,6 +192,7 @@ def create_email(service="exa"):
     """按当前 provider 生成邮箱与强密码。"""
     password = f"Tv{rand_str(6)}{random.randint(100, 999)}!A"
     prefix = _username_prefix(service)
+    actual_provider = EMAIL_PROVIDER
 
     if EMAIL_PROVIDER == "duckmail":
         email = _create_duckmail_mailbox(password, prefix)
@@ -144,11 +201,30 @@ def create_email(service="exa"):
         email, token = client.generate_email()
         _GPTMAIL_CLIENTS[email] = client
         client.set_token(token)
+    elif EMAIL_PROVIDER == "tempmail":
+        client = TempMailClient()
+        email, token = client.generate_email()
+        _TEMPMAIL_INBOXES[email] = client
+        client.set_token(token)
+    elif EMAIL_PROVIDER == "auto":
+        try:
+            client = TempMailClient()
+            email, token = client.generate_email()
+            _TEMPMAIL_INBOXES[email] = client
+            client.set_token(token)
+            actual_provider = "tempmail"
+        except Exception as exc:
+            print(f"⚠️ TempMail 初始化失败，回退 GPTMail: {exc}")
+            client = GPTMailClient()
+            email, token = client.generate_email()
+            _GPTMAIL_CLIENTS[email] = client
+            client.set_token(token)
+            actual_provider = "gptmail"
     else:
         username = f"{prefix}-{rand_str()}"
         email = f"{username}@{get_active_domain()}"
 
-    print(f"✅ 邮箱({EMAIL_PROVIDER}): {email}")
+    print(f"✅ 邮箱({actual_provider}): {email}")
     return email, password
 
 
@@ -183,8 +259,8 @@ def get_email_code(email, timeout=120, service="exa"):
 def _poll_mailbox(email, timeout, extractor, found_message, timeout_message, error_prefix, dot_progress):
     start_time = time.time()
     seen_ids = set()
-
     poll_count = 0
+
     while time.time() - start_time < timeout:
         poll_count += 1
         try:
@@ -208,7 +284,6 @@ def _poll_mailbox(email, timeout, extractor, found_message, timeout_message, err
         else:
             print(f"[mail] poll #{poll_count}, seen={len(seen_ids)}")
 
-    # 兜底再拉一轮，避免最后一秒没取到
     try:
         for message in _iter_messages(email):
             result = extractor(message)
@@ -217,9 +292,6 @@ def _poll_mailbox(email, timeout, extractor, found_message, timeout_message, err
                 return result
     except Exception as exc:
         print(f"⚠️  {error_prefix}: {exc}")
-
-    print(timeout_message)
-    return None
 
     print(timeout_message)
     return None
@@ -255,25 +327,46 @@ def _extract_verification_link(message):
 
 
 def _extract_email_code(message, service="exa"):
-    subject = (message.get("subject") or "").lower()
+    service = _normalize_service(service)
+    subject = (message.get("subject") or "")
+    sender = (message.get("from") or message.get("message_from") or "")
     text = message.get("text") or ""
+    html_content = message.get("html") or ""
     content = _message_content(message)
+    combined = "\n".join([subject, sender, text, html_content, content])
+    combined_lower = combined.lower()
 
-    # 放宽过滤：优先匹配带 verification code / otp / sign in，再兜底任意 6 位数字
-    patterns = [
-        r"verification code[^0-9]*(\d{6})",
-        r"otp[^0-9]*(\d{6})",
-        r"sign in[^0-9]*(\d{6})",
-    ]
+    if service == "exa":
+        priority_patterns = [
+            r"(?:sign\s*in|login|log\s*in|verification|verify|one[ -]?time|temporary|security|passcode|code|otp)[^0-9]{0,80}(\d{6})",
+            r"(\d{6})[^0-9]{0,80}(?:sign\s*in|login|log\s*in|verification|verify|one[ -]?time|temporary|security|passcode|code|otp)",
+        ]
+        for source in (subject, text, html_content, content, combined):
+            for pat in priority_patterns:
+                match = re.search(pat, source, re.IGNORECASE | re.DOTALL)
+                if match:
+                    return match.group(1)
+
+        exa_hints = (
+            "exa",
+            "auth.exa.ai",
+            "dashboard.exa.ai",
+            "sign in",
+            "verify",
+            "verification",
+            "code",
+            "otp",
+        )
+        if any(hint in combined_lower for hint in exa_hints):
+            codes = re.findall(r"(?<!\d)(\d{6})(?!\d)", combined)
+            if codes:
+                return codes[0]
+        return None
+
     for source in (text, content):
-        for pat in patterns:
-            m = re.search(pat, source, re.IGNORECASE)
-            if m:
-                return m.group(1)
-    for source in (text, content):
-        m = re.search(r"\b(\d{6})\b", source)
-        if m:
-            return m.group(1)
+        match = re.search(r"\b(\d{6})\b", source)
+        if match:
+            return match.group(1)
     return None
 
 
@@ -289,6 +382,18 @@ def _gptmail_iter_messages(email):
         }
 
 
+def _tempmail_iter_messages(email):
+    client = _get_tempmail_client(email)
+    for message in client.list_emails():
+        yield {
+            "subject": message.get("subject") or "",
+            "from": message.get("from") or message.get("sender") or message.get("from_address") or "",
+            "text": message.get("body") or message.get("text") or message.get("content") or "",
+            "html": message.get("html") or message.get("html_body") or message.get("body_html") or "",
+            "id": message.get("id") or message.get("email_id") or message.get("msgid") or "",
+        }
+
+
 def _iter_messages(email):
     if EMAIL_PROVIDER == "duckmail":
         yield from _duckmail_iter_messages(email)
@@ -296,6 +401,16 @@ def _iter_messages(email):
     if EMAIL_PROVIDER == "gptmail":
         yield from _gptmail_iter_messages(email)
         return
+    if EMAIL_PROVIDER == "tempmail":
+        yield from _tempmail_iter_messages(email)
+        return
+    if EMAIL_PROVIDER == "auto":
+        if email in _TEMPMAIL_INBOXES:
+            yield from _tempmail_iter_messages(email)
+            return
+        if email in _GPTMAIL_CLIENTS:
+            yield from _gptmail_iter_messages(email)
+            return
 
     yield from _cloudflare_iter_messages(email)
 
@@ -460,15 +575,15 @@ def _duckmail_request(method, path, token=None, use_api_key=False, **kwargs):
 
 
 def _message_id(message):
-    return message.get("id") or message.get("msgid")
+    return message.get("id") or message.get("msgid") or message.get("email_id")
 
 
 def _message_content(message):
-    html = message.get("html") or ""
-    if isinstance(html, list):
-        html = " ".join(str(item) for item in html)
-    text = message.get("text") or ""
-    return f"{html} {text}"
+    html_part = message.get("html") or ""
+    if isinstance(html_part, list):
+        html_part = " ".join(str(item) for item in html_part)
+    text_part = message.get("text") or ""
+    return f"{html_part} {text_part}"
 
 
 def _response_error_message(response):

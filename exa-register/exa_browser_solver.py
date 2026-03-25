@@ -23,6 +23,10 @@ _SAVE_LOCK = threading.Lock()
 _ACCOUNT_PASSWORD_LABEL = "EMAIL_OTP_ONLY"
 _EXA_AUTH_URL = "https://auth.exa.ai/?callbackUrl=https%3A%2F%2Fdashboard.exa.ai%2F"
 _EXA_HOME_URL = "https://dashboard.exa.ai/home"
+_EXA_WARMUP_URLS = [
+    "https://exa.ai/",
+    "https://exa.ai/docs/reference/search-api-guide",
+]
 
 
 def fill_first_input(page, selectors, value):
@@ -34,13 +38,97 @@ def fill_first_input(page, selectors, value):
     return None
 
 
+def _move_mouse_to_element(page, element):
+    try:
+        box = element.bounding_box()
+        if not box:
+            return False
+        target_x = box["x"] + box["width"] * random.uniform(0.35, 0.65)
+        target_y = box["y"] + box["height"] * random.uniform(0.35, 0.65)
+        start_x = max(20, target_x + random.uniform(-160, 160))
+        start_y = max(20, target_y + random.uniform(-120, 120))
+        page.mouse.move(start_x, start_y)
+        time.sleep(random.uniform(0.08, 0.18))
+        page.mouse.move(target_x, target_y, steps=random.randint(12, 28))
+        return True
+    except Exception:
+        return False
+
+
+def _idle_mouse_jitter(page):
+    try:
+        viewport = page.viewport_size or {"width": 1366, "height": 900}
+        width = max(400, int(viewport.get("width", 1366)))
+        height = max(300, int(viewport.get("height", 900)))
+        x1 = random.randint(int(width * 0.2), int(width * 0.8))
+        y1 = random.randint(int(height * 0.15), int(height * 0.75))
+        x2 = min(width - 10, max(10, x1 + random.randint(-120, 120)))
+        y2 = min(height - 10, max(10, y1 + random.randint(-90, 90)))
+        page.mouse.move(x1, y1, steps=random.randint(8, 18))
+        time.sleep(random.uniform(0.12, 0.35))
+        page.mouse.move(x2, y2, steps=random.randint(6, 16))
+        return True
+    except Exception:
+        return False
+
+
 def click_first(page, selectors):
     """点击第一个存在的按钮/链接"""
     for selector in selectors:
-        if page.query_selector(selector):
-            page.click(selector, no_wait_after=True)
+        element = page.query_selector(selector)
+        if not element:
+            continue
+        try:
+            _move_mouse_to_element(page, element)
+            time.sleep(random.uniform(0.12, 0.35))
+            element.click(no_wait_after=True)
             return True
+        except Exception:
+            try:
+                page.click(selector, no_wait_after=True)
+                return True
+            except Exception:
+                continue
     return False
+
+
+def human_type_first_input(page, selectors, value):
+    """更像真人地点击输入框并逐字输入。"""
+    for selector in selectors:
+        element = page.query_selector(selector)
+        if not element:
+            continue
+        try:
+            _move_mouse_to_element(page, element)
+        except Exception:
+            pass
+        try:
+            element.click()
+        except Exception:
+            try:
+                page.click(selector)
+            except Exception:
+                continue
+        time.sleep(random.uniform(0.2, 0.6))
+        try:
+            element.fill("")
+        except Exception:
+            try:
+                page.fill(selector, "")
+            except Exception:
+                pass
+        for ch in value:
+            try:
+                element.type(ch, delay=random.randint(60, 180))
+            except Exception:
+                try:
+                    page.keyboard.type(ch, delay=random.randint(60, 180))
+                except Exception:
+                    return None
+            if random.random() < 0.12:
+                time.sleep(random.uniform(0.08, 0.22))
+        return selector
+    return None
 
 
 def extract_api_key(page):
@@ -265,6 +353,38 @@ def _apply_stealth(page):
         pass
 
 
+def _human_scroll_warmup(page, seconds=5):
+    end_time = time.time() + seconds
+    direction = 1
+    while time.time() < end_time:
+        amount = random.randint(180, 420) * direction
+        try:
+            page.mouse.wheel(0, amount)
+        except Exception:
+            try:
+                page.evaluate("window.scrollBy(0, arguments[0])", amount)
+            except Exception:
+                pass
+        time.sleep(random.uniform(0.4, 0.9))
+        if random.random() < 0.25:
+            direction *= -1
+
+
+def _warmup_exa_session(page):
+    try:
+        page.goto(_EXA_WARMUP_URLS[0], wait_until="domcontentloaded", timeout=30000)
+        time.sleep(random.uniform(1.8, 3.2))
+        page.goto(_EXA_WARMUP_URLS[1], wait_until="domcontentloaded", timeout=45000)
+        time.sleep(random.uniform(1.5, 2.5))
+        scroll_seconds = random.uniform(3, 10)
+        print(f"[debug] exa warmup scrolling for {scroll_seconds:.1f}s")
+        _human_scroll_warmup(page, seconds=scroll_seconds)
+        time.sleep(random.uniform(0.8, 1.6))
+        print("[debug] exa warmup done")
+    except Exception as exc:
+        print(f"[debug] exa warmup skipped: {exc}")
+
+
 def _launch_camoufox():
     """避免在已有 asyncio loop 中直接调用 sync API"""
     try:
@@ -313,20 +433,17 @@ def register_with_browser(email, password):
             except Exception:
                 pass
 
-            # 预热：先访问官网和首页，产生 cookies/localStorage
-            try:
-                page.goto("https://exa.ai/", wait_until="domcontentloaded", timeout=20000)
-                time.sleep(2)
-                page.goto("https://exa.ai/home", wait_until="domcontentloaded", timeout=20000)
-                time.sleep(2)
-            except Exception:
-                pass
+            _warmup_exa_session(page)
 
             page.goto(_EXA_AUTH_URL, wait_until="networkidle", timeout=45000)
             print(f"[debug] page goto done: {page.url}")
-            time.sleep(2)
+            auth_idle = random.uniform(1.0, 3.0)
+            print(f"[debug] auth idle before typing={auth_idle:.2f}s")
+            time.sleep(auth_idle)
+            _idle_mouse_jitter(page)
+            time.sleep(random.uniform(0.2, 0.7))
 
-            email_selector = fill_first_input(
+            email_selector = human_type_first_input(
                 page,
                 ['input[type="email"]', 'input[placeholder="Email"]', 'input[aria-label="Email"]'],
                 email,
@@ -337,7 +454,9 @@ def register_with_browser(email, password):
                 return None
 
             # 模拟人类输入节奏
-            time.sleep(1 + random.random())
+            pause_before_submit = random.uniform(0.8, 1.8)
+            print(f"[debug] pause before submit={pause_before_submit:.2f}s")
+            time.sleep(pause_before_submit)
             if not click_first(
                 page,
                 [
