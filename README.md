@@ -15,11 +15,12 @@
 ### 🔧 资源推荐
 - [YesCaptcha](https://yescaptcha.com/i/tlkF6o)（自动验证码识别工具）
 - [LuckMail](https://mails.luckyous.com/1434E853)（outlook邮箱接码）
-- Claude / GPT 中转站推荐：[DeRouter](https://derouter.ai?ref=MASTERALANLAB)
+- 中转站 API：[CoRouter](https://corouter.cc/)
 
 ### ⚠️ 重要提示
 - Tavily 官方目前已关闭邮箱注册，原有注册机目前不可用，后续更新请关注上方频道
 - OpenAI 官方注册流程近期已调整，当前 `openai-register` 脚本/注册机暂不可用，等待后续更新再使用
+- Grok 注册机目前还可以正常注册，，可搭配 https://github.com/jiujiu532/grok2api 项目使用
 
 ### 💬 交流与反馈
 - TG 频道：https://t.me/MasterAlanLab
