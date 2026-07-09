@@ -40,6 +40,13 @@ def _luckmail_settings() -> dict:
     }
 
 
+def _mailnest_settings() -> dict:
+    return {
+        "api_key": str(os.getenv("MAILNEST_API_KEY") or "").strip(),
+        "project_code": str(os.getenv("MAILNEST_PROJECT_CODE") or "x-ai001").strip(),
+    }
+
+
 class GPTMailClient:
     """与现有 grok-register 保持一致的 GPTMail 访问方式"""
 
@@ -185,13 +192,100 @@ class LuckMailInbox:
             return None
 
 
+class MailNestInbox:
+    def __init__(
+            self,
+            api_key: str,
+            project_code: str = "z-ai001",
+            timeout: int = 30,
+    ):
+        if not api_key:
+            raise RuntimeError("缺少 MailNest_API_KEY")
+
+        self.api_key = api_key
+        self.project_code = project_code
+        self.timeout = timeout
+
+    def __req(self, method, url, params=None, json=None):
+        resp = requests.request(
+            method,
+            url,
+            params=params,
+            json=json,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            verify=False,
+        )
+        if resp.status_code == 401:
+            print('api-key 无效')
+            raise Exception('api-key 无效')
+        resp.raise_for_status()
+        resp_json = resp.json()
+        print(resp_json)
+        if resp_json['code'] != '00000':
+            raise Exception(f'{resp_json}')
+        return resp_json['data']
+
+    def create_email(self):
+        email = ''
+        try:
+            email = self.__req(
+                'POST',
+                "https://mailnest.top/api/v1/email/temporary/buy",
+                json={
+                    "project_code": self.project_code,
+                    "count": 1,
+                }
+            )[0]['email']
+        except:
+            pass
+        # 当项目邮箱数量不足时会获取失败 或 没有这个项目 购买独占邮箱
+        if not email:
+            try:
+                email = self.__req(
+                    'POST',
+                    "https://mailnest.top/api/v1/email/exclusive/buy",
+                    json={
+                        "count": 1,
+                    }
+                )[0]['email']
+            except:
+                pass
+        if not email:
+            raise RuntimeError("MailNest 购买邮箱失败")
+        return {"provider": "mailnest", "token": self.api_key, "email": email, "client": self}, email
+
+    def fetch_first_email(self, email) -> Optional[str]:
+        if not self.api_key:
+            return None
+        try:
+            mails = self.__req(
+                'POST',
+                f'https://mailnest.top/api/v1/email/receive',
+                json={
+                    "email": email,
+                },
+            )
+            if not mails:
+                return None
+            return '\n'.join([
+                mails[0]['subject'],
+                mails[0]['body_preview'],
+                mails[0]['body'],
+            ]) or None
+        except Exception as e:
+            print(f"获取 MailNest 邮件失败: {e}")
+            return None
+
+
 class EmailService:
     """统一邮箱服务门面，兼容旧调用方"""
 
     def __init__(self, proxies: Any = None, provider: str = "gptmail"):
         self.proxies = proxies
         self.provider = str(provider or os.getenv("EMAIL_PROVIDER") or "gptmail").strip().lower()
-        if self.provider not in {"gptmail", "luckmail"}:
+        if self.provider not in {"gptmail", "luckmail", 'mailnest'}:
             raise ValueError(f"不支持的邮箱提供商: {self.provider}")
 
     def create_email(self):
@@ -213,7 +307,19 @@ class EmailService:
             except Exception as e:
                 print(f"[Error] 请求 LuckMail 出错: {e}")
                 return None, None
-
+        elif self.provider == 'mailnest':
+            try:
+                settings = _mailnest_settings()
+                inbox = MailNestInbox(
+                    api_key=settings["api_key"],
+                    project_code=settings["project_code"],
+                )
+                token_like, email = inbox.create_email()
+                print(f"[+] MailNest 邮箱已购买: {email}")
+                return token_like, email
+            except Exception as e:
+                print(f"[Error] 请求 MailNest 出错: {e}")
+                return None, None
         try:
             client = GPTMailClient(self.proxies)
             email = client.generate_email()
@@ -234,6 +340,11 @@ class EmailService:
                 if not client:
                     return None
                 return client.fetch_first_email()
+            elif provider == "mailnest":
+                client = token_like.get("client")
+                if not client:
+                    return None
+                return client.fetch_first_email(token_like.get("email"))
 
             client: Optional[GPTMailClient] = token_like.get("client")
             email = str(token_like.get("email") or "").strip()
