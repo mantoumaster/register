@@ -19,7 +19,7 @@
 ### ⚠️ 重要提示
 - Tavily 注册机目前不可用，后续更新请关注上方频道
 - OpenAI 注册机目前不可用，后续更新请关注上方频道
-- Grok 注册机目前可以正常注册，，可搭配 https://github.com/jiujiu532/grok2api 项目使用
+- Grok 注册机目前可以正常注册，可搭配 https://github.com/jiujiu532/grok2api 项目使用
 
 ### 💬 交流与反馈
 - TG 频道：https://t.me/MasterAlanLab
