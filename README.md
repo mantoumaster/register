@@ -14,7 +14,6 @@
 - [YesCaptcha](https://cutt.ly/Mywt39r0)（自动验证码识别工具）
 - [订阅合租拼车](https://cutt.ly/5ywt8vb4)
 - [海外账号、电话卡](https://cutt.ly/dywt86NC)
-- [美国虚拟信用卡卡台](https://cutt.ly/rywt0poG)(默认开卡费3U，5%充值费，注册后把用户名发我，给你降低到 0.5U，1%充值费)
 
 ### ⚠️ 重要提示
 - Tavily 注册机目前不可用，后续更新请关注上方频道
