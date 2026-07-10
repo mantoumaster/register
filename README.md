@@ -14,6 +14,7 @@
 - [YesCaptcha](https://cutt.ly/Mywt39r0)（自动验证码识别工具）
 - [订阅合租拼车](https://cutt.ly/5ywt8vb4)
 - [海外账号、电话卡](https://cutt.ly/dywt86NC)
+- [满血CC、GPT中转站](https://derouter.ai?ref=MASTERALANLAB)(返90%佣金)
 
 ### ⚠️ 重要提示
 - Tavily 注册机目前不可用，后续更新请关注上方频道
