@@ -1,0 +1,20 @@
+{
+    "email_suffix": "@hotmail.com",
+    "proxy": "http://127.0.0.1:10808",
+    "bot_protection_wait": 11,
+    "max_captcha_retries": 2,
+    "concurrent_flows": 1,
+    "max_tasks": 5,
+    "oauth2": {
+        "enable_oauth2": false,
+        "client_id": "",
+        "redirect_url": "",
+        "Scopes": [
+            "offline_access",
+            "https://graph.microsoft.com/Mail.ReadWrite",
+            "https://graph.microsoft.com/Mail.Send",
+            "https://graph.microsoft.com/User.Read"
+        ]
+    },
+    "info": "使用独立的 outlook-register 比特浏览器窗口。email_suffix 只能是 @outlook.com 或 @hotmail.com；单窗口模式下 concurrent_flows 必须为 1。"
+}

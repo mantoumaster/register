@@ -19,36 +19,46 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
-venv/
+# Virtual Environment
 .venv/
-ENV/
+venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
 
-# Project specific
-config.yaml
-*.local.yaml
-*.secret.yaml
-.env
-.env.*
-email.txt
-*.log
-api_keys.txt
-failed.txt
-run.log
-
-# AI/Editor tools
-.zencoder/
-.zenflow/
-
-# OS files
+# OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+
+# Project specific
+.env
+.coverage
+.ruff_cache/
+email_cookies.json
+api_keys.md
+api_keys.txt
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.log
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

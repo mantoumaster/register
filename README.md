@@ -14,12 +14,12 @@
 - [YesCaptcha](https://cutt.ly/Mywt39r0)（自动验证码识别工具）
 - [订阅合租拼车](https://cutt.ly/5ywt8vb4)
 - [海外账号、电话卡](https://cutt.ly/dywt86NC)
-- [满血CC、GPT中转站](https://derouter.ai?ref=MASTERALANLAB)(返90%佣金)
+- [满血CC、GPT中转站](https://cutt.ly/JywJG3G5)(返90%佣金)
+- [Telegram 搜索机器人](https://cutt.ly/2yeh3GOE)
 
 ### ⚠️ 重要提示
-- Tavily 注册机目前不可用，后续更新请关注上方频道
-- OpenAI 注册机目前不可用，后续更新请关注上方频道
-- Grok 注册机目前可以正常注册，可搭配 https://github.com/jiujiu532/grok2api 项目使用
+- exa 关闭了邮箱注册，目前不可用
+- Grok 免费账号可搭配 https://github.com/jiujiu532/grok2api 项目使用
 
 ### 💬 交流与反馈
 - TG 频道：https://t.me/MasterAlanLab

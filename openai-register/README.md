@@ -1,346 +1,131 @@
-# OpenAI 自动注册说明书
+# OpenAI 自动注册
 
-## 1. 功能概览
-这个脚本支持下面几件事：
+通过比特浏览器管理可复用的指纹窗口，使用 Playwright CDP 控制 ChatGPT 注册页面，并从临时邮箱读取验证码。进入 ChatGPT 页面并确认登录成功后，本轮流程结束。
 
-- 自动注册 OpenAI 账号
-- 保存账号密码和 token 到本地
-- 注册成功后自动上传到 Sub2API
-- 注册成功后自动上传到 CPA
-- 清理 Sub2API 中 `training_set_failed` 账号
-- 控制 Sub2API / CPA 池子数量，达到目标后暂停注册
+## 环境要求
 
----
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/)
+- 已安装、登录并正在运行的比特浏览器
+- 比特浏览器已开启 Local API
 
-## 2. 环境准备
-基础功能（注册 / Sub2API 上传 / Sub2API 清理）只需要：
+## 安装
 
 ```bash
 cd openai-register
 uv sync
 ```
 
-如果还要启用 CPA 清理（`--cpa-clean`，依赖 `aiohttp`），再安装可选依赖：
+## Bit Browser 配置
+
+可在 shell 中设置环境变量，也可以参考 `.env.example`：
 
 ```bash
-cd openai-register
-uv sync --extra cpa
+export BIT_BROWSER_API_URL="http://127.0.0.1:54346"
+export BIT_BROWSER_NAME="openai-register"
+export BIT_BROWSER_ID=""
+export BIT_BROWSER_HEADLESS="false"
+export BIT_BROWSER_CLOSE_WAIT="5"
+export BROWSER_TIMEOUT="30000"
 ```
 
----
+代理请直接在比特浏览器的窗口配置中设置。程序不提供 `--proxy` 参数，创建或复用窗口时也不会写入或覆盖代理字段。
 
-## 3. 最简单的用法
-只注册一次：
+窗口管理规则：
+
+- `BIT_BROWSER_ID` 非空时直接复用指定窗口。
+- 未指定 ID 时按 `BIT_BROWSER_NAME` 精确查找；没有则创建，存在则复用。
+- 发现多个同名窗口时停止运行，避免使用错误的浏览器环境。
+- 每轮启动前重新生成浏览器指纹。
+- 每轮结束后关闭窗口并清除 Cookie 和缓存，但保留窗口 ID 供下一轮复用。
+
+## 邮箱 Provider
+
+支持：
+
+- `auto`
+- `luckmail`
+- `tempmail`
+- `gptmail`
+- `outlook_tw`
+
+### outlook.tw
+
+`outlook_tw` 使用匿名邮箱 API，无需 API Key：
 
 ```bash
-cd openai-register
-uv run python openai_register.py --once
+export OUTLOOK_TW_BASE_URL="https://outlook.tw"
+export OUTLOOK_TW_USERNAME_LENGTH="8"
+export OUTLOOK_TW_DOMAIN_INDEX="0"
+export OUTLOOK_TW_POLL_INTERVAL="3"
+export OUTLOOK_TW_REQUEST_TIMEOUT="30"
+export OUTLOOK_TW_MAX_WAIT="300"
 ```
 
-指定邮箱提供商：
+### LuckMail
 
 ```bash
-uv run python openai_register.py --mail-provider luckmail --once
-uv run python openai_register.py --mail-provider tempmail --once
-uv run python openai_register.py --mail-provider gptmail --once
-```
-
-`--mail-provider auto` 为默认值，顺序是：
-
-1. LuckMail
-2. TempMail.lol
-3. GPTMail
-
----
-
-## 4. 邮箱配置
-
-### 4.1 LuckMail
-默认内置：
-
-- `LUCKMAIL_BASE_URL=https://mails.luckyous.com`
-
-一般至少配置：
-
-```bash
+export LUCKMAIL_BASE_URL="https://mails.luckyous.com"
 export LUCKMAIL_API_KEY="YOUR_LUCKMAIL_API_KEY"
-```
-
-完整示例：
-
-```bash
-export LUCKMAIL_API_KEY="YOUR_LUCKMAIL_API_KEY"
-export LUCKMAIL_API_SECRET="YOUR_LUCKMAIL_API_SECRET"
+export LUCKMAIL_API_SECRET=""
 export LUCKMAIL_USE_HMAC="false"
 export LUCKMAIL_PROJECT_CODE="openai"
 export LUCKMAIL_EMAIL_TYPE="ms_graph"
 export LUCKMAIL_DOMAIN="outlook.com"
 export LUCKMAIL_ORDER_TIMEOUT="180"
 export LUCKMAIL_POLL_INTERVAL="6"
-
-uv run python openai_register.py --mail-provider luckmail --once
 ```
 
-如果你使用的是别的 LuckMail 站点，再额外覆盖：
+## 运行
+
+注册一次：
 
 ```bash
-export LUCKMAIL_BASE_URL="https://your-luckmail.example.com"
+uv run python openai_register.py --mail-provider outlook_tw --once
 ```
 
----
-
-## 5. Sub2API 用法
-
-### 5.1 注册成功后自动上传
-推荐使用全局 Admin API Key：
+持续运行：
 
 ```bash
-cd openai-register
-uv run python openai_register.py \
-  --sub2api-base-url http://203.0.113.10:8080 \
-  --sub2api-admin-api-key YOUR_SUB2API_ADMIN_API_KEY \
-  --sub2api-group-ids 2 \
-  --sub2api-upload \
-  --prune-local \
-  --once
+uv run python openai_register.py --mail-provider outlook_tw
 ```
 
-也可以用环境变量：
+## 注册流程
 
-```bash
-export SUB2API_BASE_URL="http://203.0.113.10:8080"
-export SUB2API_ADMIN_API_KEY="YOUR_SUB2API_ADMIN_API_KEY"
-export SUB2API_GROUP_IDS="2"
-export AUTO_UPLOAD_SUB2API="true"
+1. 临时邮箱 provider 创建或分配邮箱。
+2. 按固定名称查找或创建比特浏览器窗口。
+3. 配置窗口复用规则并随机生成本轮指纹。
+4. Playwright 通过 CDP 接管比特浏览器窗口。
+5. 在 ChatGPT 页面提交邮箱并轮询 6 位验证码。
+6. 填写姓名和年龄，完成账户创建。
+7. 等待 ChatGPT 输入框出现，确认账户创建和登录成功。
+8. 关闭浏览器窗口，清除 Cookie 和缓存。
 
-uv run python openai_register.py --once
-```
+当前页面流程使用邮箱验证码注册，不设置密码，也不会保存账号或 token 文件。成功结果只输出到终端。
 
-### 5.2 使用邮箱密码登录后台
-如果你不用 Admin API Key，也可以用管理员账号登录换 bearer：
+## 参数
 
-```bash
-uv run python openai_register.py \
-  --sub2api-base-url http://203.0.113.10:8080 \
-  --sub2api-email admin@example.com \
-  --sub2api-password 'your_admin_password' \
-  --sub2api-upload \
-  --prune-local \
-  --once
-```
+- `--mail-provider`：邮箱 provider。
+- `--once`：只运行一轮。
+- `--sleep-min`：失败后最小等待秒数。
+- `--sleep-max`：失败后最大等待秒数。
+- `--luckmail-*`：LuckMail 配置。
+- `--outlook-tw-*`：outlook.tw 配置。
 
-### 5.3 控制 Sub2API 池子数量
-如果你希望 Sub2API 可用账号达到某个数量后暂停注册，用 `--sub2api-target-count`：
+## 常见问题
 
-```bash
-uv run python openai_register.py \
-  --sub2api-base-url http://203.0.113.10:8080 \
-  --sub2api-admin-api-key YOUR_SUB2API_ADMIN_API_KEY \
-  --sub2api-group-ids 2 \
-  --sub2api-upload \
-  --sub2api-target-count 300
-```
+### 无法连接比特浏览器
 
-也支持环境变量：
+确认比特浏览器正在运行、已开启 Local API，并检查 `BIT_BROWSER_API_URL` 的端口。
 
-```bash
-export SUB2API_TARGET_COUNT="300"
-```
+### 出现多个同名窗口
 
-规则很简单：
+删除或重命名重复窗口，或者通过 `BIT_BROWSER_ID` 明确指定需要复用的窗口。
 
-- 只有开启 `--sub2api-upload` 时，这个限制才有意义
-- 当 Sub2API 当前可用账号数 `>= target_count` 时，脚本不会继续注册
-- 循环模式下会等待一段时间后再检查
-- `0` 表示不限制
+### 收不到验证码
 
-### 5.4 清理 `training_set_failed` 账号
+检查邮箱 provider 服务状态，并适当增加轮询间隔或最大等待时间。
 
-```bash
-uv run python openai_register.py \
-  --sub2api-base-url http://203.0.113.10:8080 \
-  --sub2api-admin-api-key YOUR_SUB2API_ADMIN_API_KEY \
-  --sub2api-clean-training-set-failed \
-  --sub2api-clean-only \
-  --once
-```
+### 登录成功判断失败
 
-清理逻辑说明：
-
-- 会先全量分页拉取账号
-- 再在本地精确匹配 `extra.privacy_mode == "training_set_failed"`
-- 只有命中的账号才会删除
-
----
-
-## 6. CPA 用法
-
-### 6.1 注册成功后自动上传
-
-```bash
-cd openai-register
-uv run python openai_register.py \
-  --cpa-base-url http://203.0.113.10:8317 \
-  --cpa-token YOUR_CPA_LOGIN_PASSWORD \
-  --cpa-upload \
-  --prune-local \
-  --once
-```
-
-### 6.2 上传 + 清理 + 数量控制
-如果还要使用 `--cpa-clean`，记得先执行：
-
-```bash
-uv sync --extra cpa
-```
-
-完整示例：
-
-```bash
-uv run python openai_register.py \
-  --cpa-base-url http://203.0.113.10:8317 \
-  --cpa-token YOUR_CPA_LOGIN_PASSWORD \
-  --cpa-upload \
-  --cpa-clean \
-  --cpa-target-count 300 \
-  --cpa-workers 1 \
-  --cpa-timeout 12 \
-  --cpa-retries 1 \
-  --cpa-used-threshold 95 \
-  --prune-local
-```
-
-填写规则：
-
-- `--cpa-token` 填 CPA 后台登录密码
-- `--cpa-base-url` 只写到协议 + IP/域名 + 端口
-- 不要带后台页面路径
-
-正确示例：
-
-```bash
-http://203.0.113.10:8317
-```
-
-错误示例：
-
-```bash
-http://203.0.113.10:8317/management.html#/
-```
-
----
-
-## 7. 常用运行场景
-
-### 7.1 持续注册，不上传
-
-```bash
-uv run python openai_register.py
-```
-
-### 7.2 持续注册并上传到 Sub2API
-
-```bash
-uv run python openai_register.py \
-  --sub2api-base-url http://203.0.113.10:8080 \
-  --sub2api-admin-api-key YOUR_SUB2API_ADMIN_API_KEY \
-  --sub2api-upload
-```
-
-### 7.3 持续注册并保持 Sub2API 池子在目标数量附近
-
-```bash
-uv run python openai_register.py \
-  --sub2api-base-url http://203.0.113.10:8080 \
-  --sub2api-admin-api-key YOUR_SUB2API_ADMIN_API_KEY \
-  --sub2api-upload \
-  --sub2api-target-count 300
-```
-
-### 7.4 持续注册并保持 CPA 池子在目标数量附近
-
-```bash
-uv run python openai_register.py \
-  --cpa-base-url http://203.0.113.10:8317 \
-  --cpa-token YOUR_CPA_LOGIN_PASSWORD \
-  --cpa-upload \
-  --cpa-target-count 300
-```
-
-### 7.5 同时上传到 Sub2API 和 CPA
-
-```bash
-uv run python openai_register.py \
-  --sub2api-base-url http://203.0.113.10:8080 \
-  --sub2api-admin-api-key YOUR_SUB2API_ADMIN_API_KEY \
-  --sub2api-upload \
-  --cpa-base-url http://203.0.113.10:8317 \
-  --cpa-token YOUR_CPA_LOGIN_PASSWORD \
-  --cpa-upload \
-  --prune-local
-```
-
----
-
-## 8. 参数速查
-
-### 8.1 基础参数
-- `--proxy`：HTTP/S 代理
-- `--mail-provider`：`auto` / `luckmail` / `gptmail` / `tempmail`
-- `--once`：只跑一轮
-- `--sleep-min` / `--sleep-max`：循环等待区间
-- `--upload-delay-min` / `--upload-delay-max`：注册成功后、执行上传前的等待区间
-
-### 8.2 LuckMail 参数
-- `--luckmail-base-url`：LuckMail 平台地址；默认使用内置值 `https://mails.luckyous.com`。
-- `--luckmail-api-key`：LuckMail API Key，使用 LuckMail 时通常必填。
-- `--luckmail-api-secret`：LuckMail API Secret，可选。
-- `--luckmail-use-hmac`：是否启用 HMAC 鉴权；不加这个参数时默认关闭。
-- `--luckmail-project-code`：LuckMail 项目编码，默认 `openai`。
-- `--luckmail-email-type`：LuckMail 邮箱类型，默认 `ms_graph`。
-- `--luckmail-domain`：LuckMail 指定邮箱域名，默认 `outlook.com`。
-- `--luckmail-order-timeout`：LuckMail 接码等待超时秒数。
-- `--luckmail-poll-interval`：LuckMail 轮询邮件/验证码的间隔秒数。
-
-### 8.3 Sub2API 参数
-- `--sub2api-base-url`：Sub2API 地址，只写到协议 + IP/域名 + 端口。
-- `--sub2api-admin-api-key`：Sub2API 全局管理员 API Key，推荐优先使用。
-- `--sub2api-bearer`：兼容旧方式的 Bearer token。
-- `--sub2api-email`：Sub2API 管理员邮箱，用于旧登录方式自动换 bearer。
-- `--sub2api-password`：Sub2API 管理员密码，用于旧登录方式自动换 bearer。
-- `--sub2api-group-ids`：上传后绑定的分组 ID，逗号分隔，默认 `2`。
-- `--sub2api-upload`：注册成功后自动上传到 Sub2API。
-- `--sub2api-target-count`：Sub2API 目标可用账号数；达到后暂停注册，`0` 表示不限制。
-- `--sub2api-clean-training-set-failed`：清理 `extra.privacy_mode == "training_set_failed"` 的账号。
-- `--sub2api-clean-only`：只执行 Sub2API 清理，不跑注册流程。
-
-### 8.4 CPA 参数
-- `--cpa-base-url`：CPA 管理地址，只写到协议 + IP/域名 + 端口。
-- `--cpa-token`：CPA 后台登录密码。
-- `--cpa-workers`：CPA 清理探测并发数。
-- `--cpa-timeout`：CPA 请求超时秒数。
-- `--cpa-retries`：CPA 清理探测失败后的重试次数。
-- `--cpa-used-threshold`：CPA 用量阈值；超过这个 `used_percent` 会被视为需要清理。
-- `--cpa-clean`：注册后自动探测并清理 CPA 中失效或超阈值账号。
-- `--cpa-upload`：注册成功后自动上传到 CPA。
-- `--cpa-target-count`：CPA 目标有效 token 数；达到后暂停注册。
-
-### 8.5 本地清理参数
-- `--prune-local`：当 Sub2API / CPA 任一上传成功后，删除本地 token 文件和 `tokens/accounts.txt` 中对应账号
-
----
-
-## 9. 输出位置
-- 账号密码：`tokens/accounts.txt`
-  - 格式：`email----password`
-- Token JSON：`tokens/token_<email>_<timestamp>.json`
-
-`tokens/` 已加入 `.gitignore`，默认不会提交到仓库。
-
----
-
-## 10. 注意事项
-- 需要能访问 `https://auth.openai.com`
-- 代理地区尽量避开 CN / HK
-- 临时邮箱不稳定时，可以切换 `--mail-provider gptmail` 或 `--mail-provider tempmail`
-- 如果用 `auto`，会自动按 `LuckMail -> TempMail.lol -> GPTMail` 顺序回退
+使用前台模式观察页面，确认账户创建完成后是否已经进入 ChatGPT，并检查 `#prompt-textarea` 是否正常显示。

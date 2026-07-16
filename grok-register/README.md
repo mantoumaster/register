@@ -97,3 +97,10 @@ uv run python grok.py --email-provider luckmail --threads 8
 - `luckmail` 走的是**购买邮箱 + token 轮询邮件**的模式，不是一次性接码订单。
 - 使用 `luckmail` 前需要先注册 LuckMail 网站并获取 API Key。
 - LuckMail 的邮箱购买会产生消费，不是免费邮箱。
+
+## 资源推荐
+- [YesCaptcha](https://cutt.ly/Mywt39r0)（自动验证码识别工具）
+- [订阅合租拼车](https://cutt.ly/5ywt8vb4)
+- [海外账号、电话卡](https://cutt.ly/dywt86NC)
+- [满血CC、GPT中转站](https://cutt.ly/JywJG3G5)(返90%佣金)
+- [Telegram 搜索机器人](https://cutt.ly/2yeh3GOE)

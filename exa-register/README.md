@@ -46,3 +46,10 @@ uv run python exa_core.py
 - 一直拿不到验证码：检查邮箱 API 配置、域名是否可用，或加长 `EMAIL_CODE_TIMEOUT`
 - 浏览器前台闪退：把 `REGISTER_HEADLESS=false` 并确保本机有 Chrome
 - 没写入 key：看日志是否校验失败，或 dashboard 没渲染完整 key
+
+## 资源推荐
+- [YesCaptcha](https://cutt.ly/Mywt39r0)（自动验证码识别工具）
+- [订阅合租拼车](https://cutt.ly/5ywt8vb4)
+- [海外账号、电话卡](https://cutt.ly/dywt86NC)
+- [满血CC、GPT中转站](https://cutt.ly/JywJG3G5)(返90%佣金)
+- [Telegram 搜索机器人](https://cutt.ly/2yeh3GOE)
